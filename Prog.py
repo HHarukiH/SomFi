@@ -3,7 +3,7 @@ import numpy as np
 import time
 
 # --- PARÂMETROS DE CALIBRAÇÃO ---
-THRESHOLD_AMPLITUDE = 20.0  # Limiar de corte de ruído
+THRESHOLD_AMPLITUDE = 27.0 # Limiar de corte de ruído
 DEBOUNCE_TIME = 0.2        # Supressão de eco mecânico (segundos)
 BIT_1_MAX_GAP = 0.6        # Tempo máximo entre duas batidas para virar um Bit 1
 BIT_0_TIMEOUT = 0.8        # Tempo de silêncio para fechar um Bit 0
@@ -12,6 +12,7 @@ BIT_0_TIMEOUT = 0.8        # Tempo de silêncio para fechar um Bit 0
 last_impact_time = 0.0
 state = "IDLE"
 bit_buffer = []
+is_paused = False # Variável que controla se o motor deve ignorar os sons
 
 # --- VARIÁVEIS GLOBAIS DE ESTADO (Interface) ---
 resultado_validacao = ""
@@ -53,7 +54,11 @@ def validate_frame(frame_bits):
 
 def process_audio_stream(indata, frames, time_info, status):
     """Callback assíncrono que extrai os bits através do volume e do tempo."""
-    global last_impact_time, state, bit_buffer
+    global last_impact_time, state, bit_buffer, is_paused
+    
+    # PORTÃO LÓGICO: Se estiver em pausa, ignora este bloco de áudio e sai da função.
+    if is_paused:
+        return
     
     amplitude = np.linalg.norm(indata) * 10
     current_time = time.time()
