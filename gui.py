@@ -4,9 +4,11 @@ import time
 import prog   # Receptor M1 (Batidas)
 import prog2  # Receptor M2 (FSK)
 import prog3  # Transmissor M2 (FSK)
+import prog4 
+import prog5
 
 # --- CONFIGURAÇÕES DA INTERFACE ---
-LARGURA, ALTURA = 800, 550
+LARGURA, ALTURA = 900, 700
 PRETO = (15, 15, 15)
 VERDE_RETRO = (50, 255, 50)
 VERMELHO_ALERTA = (255, 50, 50)
@@ -33,6 +35,12 @@ m3_input_text = ""
 m3_quadro = ""
 m3_audio = None
 m3_msg = ""
+
+# Variáveis do Transmissor (M5)
+m5_input_text = ""
+m5_quadro = ""
+m5_audio = None
+m5_msg = ""
 
 def desenhar_botao_voltar():
     pygame.draw.rect(ecra, CINZENTO_ESCURO, (20, 20, 110, 40), 2)
@@ -74,6 +82,21 @@ def desenhar_menu():
     # Subtítulo com cor visível (CINZENTO_CLARO)
     lbl_m3 = fonte_pequena.render("Gerador Síncrono de Áudio", False, CINZENTO_CLARO)
     ecra.blit(lbl_m3, lbl_m3.get_rect(center=(LARGURA//2, 395)))
+
+    #4. Receptor
+    rect_b4 = pygame.Rect(100, 450, 600, 80)
+    pygame.draw.rect(ecra, CINZENTO_ESCURO, rect_b4, 2)
+    txt_m4 = fonte_bits.render("4. RECEPTOR (FSK)", False, BRANCO)
+    ecra.blit(txt_m4, txt_m4.get_rect(center=rect_b4.center))
+
+    #5. Transmissor
+    rect_b5 = pygame.Rect(100, 560, 600, 80)
+    pygame.draw.rect(ecra, AZUL_SOMA, rect_b5, 2)
+    txt_m5 = fonte_bits.render("5. TRANSMISSOR (FSK)", False, BRANCO)
+    ecra.blit(txt_m5, txt_m5.get_rect(center=(LARGURA//2, 585)))
+    # Subtítulo com cor visível (CINZENTO_CLARO)
+    lbl_m5 = fonte_pequena.render("Gerador Síncrono de Áudio", False, CINZENTO_CLARO)
+    ecra.blit(lbl_m5, lbl_m5.get_rect(center=(LARGURA//2, 615)))
 
 def desenhar_m1():
     ecra.fill(PRETO)
@@ -197,6 +220,87 @@ def desenhar_m3():
         pygame.draw.polygon(ecra, AZUL_SOMA, [(320, 365), (320, 395), (345, 380)])
         ecra.blit(fonte_titulo.render("TRANSMITIR", False, BRANCO), (360, 365))
 
+def desenhar_m4():
+    ecra.fill(PRETO)
+    desenhar_botao_voltar()
+    desenhar_botao_pause(prog4.is_paused)
+    
+    titulo = fonte_titulo.render("MÉTODO 3 - RECEPTOR FSK", False, VERDE_RETRO)
+    ecra.blit(titulo, titulo.get_rect(center=(LARGURA//2, 35)))
+    ecra.blit(fonte_pequena.render(f"Estado Relógio: {prog4.state}", False, BRANCO), (150, 70))
+    
+    pygame.draw.rect(ecra, CINZENTO_ESCURO, (20, 100, 760, 110), 2)
+    for i in range(len(prog4.bit_buffer) if prog4.bit_buffer else 12):
+        x_pos = 35 + (i * 60)
+        y_pos = 125
+        if i >= 8: ecra.blit(fonte_pequena.render(f"S{i-7}", False, AZUL_SOMA), (x_pos+15, y_pos-20))
+        else: ecra.blit(fonte_pequena.render(f"B{i+1}", False, CINZENTO_CLARO), (x_pos+15, y_pos-20))
+
+        if i < len(prog4.bit_buffer):
+            v = prog4.bit_buffer[i]
+            cor = VERDE_RETRO if v == 1 else BRANCO
+            pygame.draw.rect(ecra, cor, (x_pos, y_pos, 50, 50), 2)
+            ecra.blit(fonte_bits.render(str(v), False, cor), (x_pos+12, y_pos+5))
+        else:
+            pygame.draw.rect(ecra, CINZENTO_ESCURO, (x_pos, y_pos, 50, 50), 1)
+
+    if time.time() - prog4.ultima_mensagem_tempo < 4.0:
+        c = VERDE_RETRO if "[SUCESSO]" in prog4.resultado_validacao else VERMELHO_ALERTA
+        ecra.blit(fonte_pequena.render(prog4.resultado_validacao, False, c), (20, 230))
+
+    ecra.blit(fonte_pequena.render("HISTÓRICO DE TRANSMISSÃO:", False, BRANCO), (20, 270))
+    y_hist = 300
+    for reg in prog4.historico_quadros:
+        cor_status = VERDE_RETRO if reg["sucesso"] else VERMELHO_ALERTA
+        ecra.blit(fonte_mini.render("SUCESSO" if reg["sucesso"] else "FALHA", False, cor_status), (20, y_hist + 5))
+        for idx, bit in enumerate(reg["bits"]):
+            x_bit = 100 + (idx * 25)
+            cor_c = cor_status if bit == 1 else CINZENTO_ESCURO
+            pygame.draw.rect(ecra, cor_c, (x_bit, y_hist, 20, 20), 1)
+            ecra.blit(fonte_mini.render(str(bit), False, cor_c if bit == 1 else BRANCO), (x_bit + 5, y_hist + 3))
+            if idx >= 8: pygame.draw.rect(ecra, cor_status, (x_bit, y_hist, 20, 20), 2)
+        y_hist += 30
+
+def desenhar_m5():
+    ecra.fill(PRETO)
+    desenhar_botao_voltar()
+    
+    titulo = fonte_titulo.render("MÉTODO 3 - TRANSMISSOR FSK", False, AZUL_SOMA)
+    ecra.blit(titulo, titulo.get_rect(center=(LARGURA//2, 35)))
+    
+    ecra.blit(fonte_pequena.render("Digite 8 bits (0 e 1):", False, BRANCO), (20, 90))
+    pygame.draw.rect(ecra, VERDE_RETRO if len(m5_input_text)==8 else CINZENTO_ESCURO, (20, 110, 200, 40), 2)
+    ecra.blit(fonte_titulo.render(m5_input_text + ("_" if int(time.time()*2) % 2 == 0 else ""), False, BRANCO), (30, 115))
+    
+    btn_conf = pygame.Rect(240, 110, 130, 40)
+    pygame.draw.rect(ecra, CINZENTO_ESCURO, btn_conf, 2)
+    ecra.blit(fonte_pequena.render("CONFIRMAR", False, BRANCO), (260, 122))
+    
+    pygame.draw.rect(ecra, CINZENTO_ESCURO, (20, 180, 760, 110), 2)
+    for i in range(len(m5_quadro) if m5_quadro else 12):
+        x_pos = 35 + (i * 60)
+        is_soma = i >= 8
+        cor_base = AZUL_SOMA if is_soma else VERDE_RETRO
+        
+        lbl = f"S{i-7}" if is_soma else f"B{i+1}"
+        ecra.blit(fonte_pequena.render(lbl, False, cor_base), (x_pos+15, 185))
+
+        if m5_quadro and i < len(m5_quadro):
+            valor = m5_quadro[i]
+            cor_txt = cor_base if valor == '1' else BRANCO
+            pygame.draw.rect(ecra, cor_txt, (x_pos, 205, 50, 50), 2)
+            ecra.blit(fonte_bits.render(valor, False, cor_txt), (x_pos+12, 210))
+        else:
+            pygame.draw.rect(ecra, CINZENTO_ESCURO, (x_pos, 205, 50, 50), 1)
+
+    ecra.blit(fonte_pequena.render(m5_msg, False, CINZENTO_CLARO), (20, 310))
+    
+    if m5_audio is not None:
+        btn_play = pygame.Rect(280, 350, 240, 60)
+        pygame.draw.rect(ecra, AZUL_SOMA, btn_play, 2)
+        pygame.draw.polygon(ecra, AZUL_SOMA, [(320, 365), (320, 395), (345, 380)])
+        ecra.blit(fonte_titulo.render("TRANSMITIR", False, BRANCO), (360, 365))
+
 def acionar_confirmacao_m3():
     global m3_quadro, m3_audio, m3_msg
     if len(m3_input_text) == 8:
@@ -205,8 +309,16 @@ def acionar_confirmacao_m3():
     else:
         m3_msg = "[ERRO] Digite exatamente 8 bits antes de confirmar."
 
+def acionar_confirmacao_m5():
+    global m5_quadro, m5_audio, m5_msg
+#    if len(m5_input_text)%4 == 0:
+    m5_quadro, m5_audio = prog5.gerar_audio_fsk(m5_input_text)
+    m5_msg = "[SISTEMA] Quadro gerado! Bits de soma calculados. Pronto para transmitir."
+#    else:
+#        m5_msg = "[ERRO] Digite exatamente 8 bits antes de confirmar."
+
 def iniciar_gui():
-    global tela_atual, stream_audio, m3_input_text, m3_quadro, m3_audio, m3_msg
+    global tela_atual, stream_audio, m3_input_text, m3_quadro, m3_audio, m3_msg, m5_input_text, m5_quadro, m5_audio, m5_msg
     
     relogio = pygame.time.Clock()
     a_executar = True
@@ -247,8 +359,25 @@ def iniciar_gui():
                             m3_msg = ""
                             tela_atual = "M3"
                             if stream_audio: stream_audio.stop(); stream_audio.close()
-                            
-                elif tela_atual in ["M1", "M2", "M3"]:
+
+                        elif 450 <= my <= 530:
+                            prog4.bit_buffer.clear()
+                            prog4.historico_quadros.clear()
+                            prog4.resultado_validacao = ""
+                            prog4.is_paused = True; tela_atual = "M4"
+                            if stream_audio: stream_audio.stop(); stream_audio.close()
+                            stream_audio = sd.InputStream(callback=prog2.processar_audio_fsk, channels=1, samplerate=44100, blocksize=1024)
+                            stream_audio.start()
+
+                        elif 560 <= my <= 640:
+                            m5_input_text = ""
+                            m5_quadro = ""
+                            m5_audio = None
+                            m5_msg = ""
+                            tela_atual = "M5"
+                            if stream_audio: stream_audio.stop(); stream_audio.close()
+
+                elif tela_atual in ["M1", "M2", "M3", "M4", "M5"]:
                     if 20 <= mx <= 130 and 20 <= my <= 60:
                         sd.stop() 
                         if stream_audio: stream_audio.stop(); stream_audio.close(); stream_audio = None
@@ -268,6 +397,16 @@ def iniciar_gui():
                             prog3.transmitir(m3_audio)
                             m3_msg = "[SISTEMA] A transmitir áudio FSK..."
 
+                    if tela_atual == "M4":
+                        prog4.is_paused = not prog4.is_paused
+
+                    if tela_atual == "M5":
+                        if 240 <= mx <= 390 and 110 <= my <= 150:
+                            acionar_confirmacao_m5()
+                        elif m5_audio is not None and 280 <= mx <= 520 and 350 <= my <= 410:
+                            prog5.transmitir(m5_audio)
+                            m5_msg = "[SISTEMA] A transmitir áudio FSK..."
+                        
             elif evento.type == pygame.KEYDOWN and tela_atual == "M3":
                 if evento.key == pygame.K_BACKSPACE:
                     m3_input_text = m3_input_text[:-1]
@@ -276,11 +415,21 @@ def iniciar_gui():
                 elif evento.unicode in ['0', '1']:
                     if len(m3_input_text) < 8:
                         m3_input_text += evento.unicode
+            elif evento.type == pygame.KEYDOWN and tela_atual == "M5":
+                if evento.key == pygame.K_BACKSPACE:
+                    m5_input_text = m5_input_text[:-1]
+                elif evento.key == pygame.K_RETURN:
+                    acionar_confirmacao_m5()
+                elif evento.unicode in ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z' , ' ']:
+#                    if len(m5_input_text) < 8:
+                    m5_input_text += evento.unicode
 
         if tela_atual == "MENU": desenhar_menu()
         elif tela_atual == "M1": desenhar_m1()
         elif tela_atual == "M2": desenhar_m2()
         elif tela_atual == "M3": desenhar_m3()
+        elif tela_atual == "M4": desenhar_m4()
+        elif tela_atual == "M5": desenhar_m5()
 
         pygame.display.flip()
         relogio.tick(30)
