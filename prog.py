@@ -6,7 +6,7 @@ TAXA_AMOSTRAGEM = 44100
 BLOCO_AUDIO = 1024
 
 # CALIBRAÇÃO FÍSICA DO AMBIENTE
-LIMIAR_VOLUME = 0.08       # Baixo o suficiente para ouvir; alto o suficiente para ignorar ruído branco
+LIMIAR_VOLUME = 0.10       # Baixo o suficiente para ouvir; alto o suficiente para ignorar ruído branco
 DEBOUNCE_ECO = 0.20        # Tempo cego após um estalo para ignorar ecos da sala
 JANELA_BIT_1 = 0.55        # Tempo máximo permitido para a segunda batida (Bit 1)
 JANELA_SILENCIO = 0.80     # Tempo de silêncio necessário para fechar/confirmar o bit
