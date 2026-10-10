@@ -1,82 +1,98 @@
-# SomFi
-Wifi pelo Som
-# Fundamentos de Telecomunicações: Implementação Acústica da Camada Física
+# 📡 Sistema de Comunicação Acústica
 
-## 1. Introdução ao Modelo OSI e a Camada Física
-No Modelo OSI (*Open Systems Interconnection*), a **Camada 1 (Física)** é responsável pela transmissão e recepção do fluxo bruto de bits (0s e 1s) não estruturados através de um meio físico. Ela não entende o significado dos dados, preocupando-se apenas com a mecânica, elétrica ou, neste projeto, com as propriedades acústicas necessárias para fazer um bit viajar do Ponto A ao Ponto B.
+**Disciplina:** Redes de Computadores  
+**Instituição:** Universidade Tecnológica Federal do Paraná (UTFPR) - Campo Mourão  
+**Equipe:** Vinicius, [Nome do Colega]
 
-Neste projeto desenvolvido em Python (utilizando `sounddevice`, `numpy` e `pygame`), o meio físico não é um cabo de cobre ou fibra ótica, mas sim o ar. O hardware de rede é substituído pelo alto-falante (emissor) e pelo microfone (receptor), provando que os conceitos de telecomunicações são independentes do meio de propagação.
-
-**O que neste projeto pertence estritamente à Camada Física?**
-Tudo o que envolve transformar dados em energia e energia de volta em dados. Isso inclui:
-* A escolha das frequências (Hertz).
-* A conversão de bits em som (Modulação).
-* A leitura da energia do ambiente (Limiar de Volume / FFT).
-* A temporização (Baud Rate vs. Bit Rate).
-
-> **Nota de Fronteira OSI:** No momento em que o nosso sistema agrupa os bits num "Quadro de 12 bits" e aplica lógicas matemáticas como Paridade ou Soma de Verificação (Checksum) para rejeitar áudios corrompidos, o projeto ultrapassou a Camada 1 e implementou funções da **Camada 2 (Camada de Enlace de Dados - Subcamada MAC)**. A Camada Física entrega o ruído; a Camada de Enlace decide se o ruído faz sentido.
+Este projeto implementa um software capaz de atuar como Emissor e Receptor de dados digitais utilizando o meio acústico (ondas sonoras). O sistema foi desenvolvido em Python e opera a transmissão e a recepção de quadros de bits em tempo real.
 
 ---
 
-## 2. Modulação e Codificação de Linha
-Para transmitir os bits pelo ar, a informação digital precisa ser codificada numa onda analógica. O projeto implementa duas abordagens clássicas:
+## 1. Fundamentação Teórica
 
-### 2.1. O Método de Batidas (Detecção de Amplitude)
-*Equivalente rústico ao OOK (On-Off Keying) ou ASK (Amplitude-Shift Keying).*
-A presença de energia (um pico de volume, ou "batida") acima de um limiar pré-definido representa um evento. O tempo decorrido entre os eventos determina se o bit é 0 ou 1. É um método suscetível a ruído ambiente, assim como a modulação AM é sensível a interferências eletromagnéticas.
+### O Modelo ISO/OSI e a Camada Física
+O Modelo OSI é uma arquitetura dividida em 7 camadas (Física, Enlace, Rede, Transporte, Sessão, Apresentação e Aplicação) que padroniza a comunicação entre sistemas. 
 
-### 2.2. O Método de Áudio Contínuo (M-FSK)
-Para o segundo método, implementou-se a Modulação **M-FSK (Multiple Frequency-Shift Keying)**, especificamente a sua variante **4-FSK**.
-Em vez de alternar a amplitude, alteramos a frequência da onda portadora. Como utilizamos 4 frequências distintas (1200, 1600, 2200 e 2800 Hz), cada variação na onda consegue transportar 2 bits por símbolo (Baud).
+A nossa implementação atua primordialmente na **Camada Física**, responsável pela transmissão de bits brutos sobre o meio de comunicação. Para isso, lidamos diretamente com:
+*   **Sinais Analógicos e Dados Digitais:** A transmissão ocorre através de ondas sonoras no ar (sinal analógico contínuo). O software realiza a modulação para inserir dados digitais (zeros e uns) nessa onda, e o processo inverso de digitalização na recepção, utilizando uma taxa de amostragem de 44.100 Hz.
+*   **Largura de Banda e Modulação:** A capacidade do canal acústico é gerida alterando as propriedades do som. No Método 1, a modulação baseia-se na variação de tempo (cadência). No Método 2, utilizamos a Modulação por Deslocamento de Frequência (FSK), alocando diferentes frequências para representar agrupamentos de bits.
+*   **Ruído:** O tratamento da interferência física do ambiente, como reverberação e sons de fundo, que causam distorção na leitura da amplitude ou da frequência.
 
-* `00` = 1200 Hz
-* `01` = 1600 Hz
-* `10` = 2200 Hz
-* `11` = 2800 Hz
+### Transição para a Camada de Enlace e Detecção de Erros
+Para poder estruturar melhor o projeto, tivemos que implementar características que já pertencem à **Camada de Enlace**. Apenas transmitir sinais no ar não é suficiente; o sistema precisa agrupar os bits em quadros organizados para delimitar início e fim, e garantir a integridade da mensagem contra ruídos.
 
-Isto ilustra a diferença crucial entre **Baud Rate** (taxa de variação do sinal físico) e **Bit Rate** (taxa de transmissão de dados). Com 4-FSK, o nosso Bit Rate é o dobro do nosso Baud Rate, garantindo maior eficiência e velocidade.
-
-> **A Física dos Harmônicos:** As frequências não foram escolhidas de forma aleatória. Em acústica, um alto-falante emitindo 1200 Hz gera harmônicos naturais em múltiplos exatos (2400 Hz, 3600 Hz, etc.). Se atribuíssemos bits a frequências múltiplas (ex: 1000 Hz e 2000 Hz), o microfone captaria fantasmas, corrompendo a leitura. As frequências escolhidas são matematicamente espaçadas para evitar que os harmônicos de uma se sobreponham à banda principal da outra.
+Implementamos duas técnicas de detecção de erros:
+1.  **Paridade Par (Método 1):** Utiliza um quadro de 9 bits. O transmissor conta os bits `1` presentes nos 8 bits de dados e adiciona um 9º bit (0 ou 1) para garantir que a soma total de bits `1` no quadro seja um número par. O receptor realiza a mesma contagem para validar a integridade.
+2.  **Soma Simples / Checksum (Método 2):** Os bits da carga de dados são somados, e o valor numérico dessa soma é convertido num byte final (8 bits) anexado ao final do quadro. O receptor recalcula a soma dos dados e compara com este byte final.
 
 ---
 
-## 3. Sincronização de Relógio e Alinhamento de Quadro
-O maior desafio da Camada Física não é enviar o sinal, mas garantir que o receptor saiba exatamente quando ler o sinal.
+## 2. Engenharia e Arquitetura das Soluções
 
-### 3.1. Assíncrono vs. Síncrono
-Inicialmente, o projeto utilizou uma abordagem **Assíncrona**, inserindo micro-silêncios entre cada símbolo (técnica conhecida como *Return-to-Zero*). Isso evita a fusão de notas idênticas (ex: ler dois `00` consecutivos), mas desperdiça muito tempo de canal com o silêncio e sofre com a reverberação acústica da sala, que prolonga a nota física.
+### Método 1: Transceptor de Impactos (Padronizado)
+Este método utiliza impactos sonoros com cadência padronizada: o Bit 0 é representado por 1 batida e o Bit 1 por 2 batidas consecutivas.
 
-A evolução do projeto migrou para uma abordagem **Síncrona Contínua** (*Non-Return-to-Zero*). Os dados são enviados sem pausas, exigindo uma temporização perfeita (cronômetro) entre emissor e receptor.
+*   **Transmissor:** Para evitar a geração de eco, o transmissor sintetiza um impacto matemático utilizando uma onda senoidal aguda (1500 Hz) multiplicada por um envelope de decaimento exponencial rápido (50 milissegundos). Isso produz um sinal acústico seco e de alta precisão.
+*   **Receptor:** O sistema capta o áudio e avalia o percentil 95 da amplitude em blocos de 1024 amostras, comparando com um limiar de volume pré-calibrado (0.08). 
+*   **Sincronização e Janelas de Tempo:** Para evitar leituras duplicadas causadas por reverberação, aplicamos um tempo de ignorância condicional (*debounce*) de 0.20 segundos após qualquer impacto. Uma janela de 0.55s é mantida aberta para aguardar a segunda batida (que define o Bit 1). O registro do bit é efetivado após 0.80s de silêncio contínuo.
 
-### 3.2. O Problema do "Clock Drift" (Desvio de Relógio)
-Se o emissor envia uma nota a cada 0.10 segundos, o receptor precisa ler a cada 0.10 segundos. No entanto, o hardware de áudio do computador tira "amostras" (blocos) em intervalos quebrados (ex: a cada 23 ms). Com o tempo, a leitura do receptor desalinha-se da emissão, lendo a transição entre duas notas (ruído) em vez do centro da onda. A isto chama-se **Clock Drift**.
+### Método 2: Modulação 16-FSK Dinâmica (Livre Escolha)
+Para alcançar uma maior taxa de transmissão, projetamos um motor síncrono utilizando modulação 16-FSK. Agrupamos os bits em blocos de 4 (simbolizando 16 estados possíveis) e mapeamos cada bloco para uma frequência específica (de 800 Hz a 3800 Hz, em intervalos de 200 Hz). O receptor utiliza a Transformada Rápida de Fourier (FFT) para identificar o pico de frequência dominante a cada janela de escuta.
 
-### 3.3. O Preâmbulo (Sync Word) e a Analogia dos "15 Volts"
-Para resolver o Clock Drift, o emissor transmite um "Tom de START" (3500 Hz) para zerar o cronômetro do receptor antes dos dados.
-
-**O Dilema Teórico:** Num sistema digital elétrico onde 5V é "0" e 10V é "1", utilizar um tom alienígena de 3500 Hz não seria o equivalente a enviar 15V apenas para iniciar o sistema? Isso existe na realidade?
-Sim e não. Em telecomunicações reais, existem duas formas de resolver isto:
-
-1. **Sinalização Fora de Banda (Out-of-Band):** É exatamente o que fizemos. Utiliza-se um canal ou frequência completamente separado da banda de dados apenas para controle. Era comum nas antigas redes telefónicas analógicas.
-2. **Sinalização Dentro da Banda (In-Band):** É como as placas de rede Ethernet e Wi-Fi modernas operam. Como não podem inventar "15 Volts", elas utilizam os próprios níveis de tensão válidos, enviando um Preâmbulo de transições repetidas e previsíveis (ex: `10101010`). O hardware receptor utiliza um circuito chamado PLL (*Phase-Locked Loop*) para ajustar o seu relógio ao ritmo dessas subidas e descidas de tensão. No final do preâmbulo, envia-se um SFD (*Start Frame Delimiter*) que avisa: *"O relógio está sincronizado, a partir de agora são os dados reais"*.
-
-No nosso projeto acústico via software, simular um PLL exigiria um processamento de DSP brutal em tempo real. Adotar o "tom de 15 Volts" (3500 Hz) atua como uma simplificação de engenharia eficiente para garantir o **Alinhamento de Quadro** num sistema não determinístico como um Sistema Operativo moderno.
-
----
-
-## 4. Detecção de Erros (Transição para a Camada de Enlace)
-Devido às interferências do meio físico (ruído ambiente, vento, distorção do microfone), a Camada Física frequentemente entrega bits invertidos. O projeto implementou lógicas da Camada de Enlace para validar a integridade (*Integrity Check*) dos quadros:
-
-* **Paridade Par (Método 1):** O 9º bit do quadro garante que o número total de bits 1 seja sempre par. Permite detetar a inversão de um único bit.
-* **Checksum / Soma Lógica (Método 2):** Os últimos 4 bits do quadro contêm o valor numérico em binário representando a quantidade total de bits 1 presentes na carga de dados de 8 bits. É uma versão simplificada do CRC (*Cyclic Redundancy Check*) utilizado no protocolo Ethernet.
+*   **Estrutura do Quadro (Protocolo de 264 bits):**
+    Para enviar caracteres ASCII sequenciais, estruturamos o envio de dados num quadro com tamanho dinâmico, contendo os seguintes limites máximos:
+    1.  **Cabeçalho (8 bits iniciais):** Determina numericamente a quantidade de bits que compõem a mensagem. O receptor lê este valor para saber exatamente quando deve parar de escutar dados.
+    2.  **Dados (Até 248 bits):** O conteúdo útil transmitido, suportando um máximo de 31 caracteres ASCII por envio (31 x 8 = 248).
+    3.  **Soma de Verificação (8 bits finais):** O checksum da mensagem.
+    
+    A capacidade total máxima por envio é de 264 bits (8 de tamanho + 248 de dados + 8 de soma).
+*   **Taxa de Transmissão Prática:** O transmissor emite 1 símbolo (4 bits) a cada 0.20 segundos. A taxa de transmissão atinge a marca teórica e prática de **20 bps (bits por segundo)**.
 
 ---
 
-## 5. DSP: A Interface com o Sistema Operacional
-Como não possuímos hardware decodificador dedicado (chips ASIC), a função do receptor foi emulada utilizando **DSP** (*Digital Signal Processing*) através do processador central (CPU).
-O sinal acústico entra pela placa de som e é transformado através da biblioteca `numpy` utilizando a **FFT** (*Fast Fourier Transform*). A FFT analisa um bloco de som bruto no domínio do tempo e converte-o para o domínio da frequência, permitindo ao software atuar como um seletor de banda ultrarrápido, isolando os 1200 Hz do ruído de uma porta a bater.
+## 3. Divisão de Tarefas
+
+O desenvolvimento do software, bem como a produção dos materiais exigidos para a entrega (vídeo e relatório), foram divididos estrategicamente entre os dois membros da equipe ao longo de três fases estruturais:
+
+**Fase 1: Idealização, Arquitetura Base e Interface Gráfica**
+*   **Responsável:** Vinicius
+*   **Atribuições:** Iniciou a estruturação do projeto criando a espinha dorsal da arquitetura do software. Foi o responsável por idealizar e desenvolver a interface gráfica central (GUI) utilizando a biblioteca `pygame`, projetando o painel de inspeção forense de bits e a renderização em tempo real das grelhas de dados. Concebeu a arquitetura do "Método 2" (16-FSK Dinâmico), definindo a estrutura do protocolo da Camada de Enlace que fatiaria a mensagem em Cabeçalho (Tamanho), Carga Útil (Dados ASCII) e Rodapé (Checksum). Criou também o mapeamento do menu e a lógica de transição fluida entre os módulos de Transmissão e Recepção.
+
+**Fase 2: Desenvolvimento dos Motores de Áudio e Algoritmos de Erro**
+*   **Responsável:** [Nome do Colega]
+*   **Atribuições:** Assumiu o desenvolvimento braçal e a pesquisa matemática para os primeiros protótipos dos motores acústicos (`prog` a `prog5`). Realizou a implementação base das bibliotecas `sounddevice` e `numpy` para leitura e geração de áudio. Escreveu os algoritmos primários para a extração de espectros de frequência utilizando a Transformada Rápida de Fourier (FFT), definindo o mapeamento dos 16 símbolos do FSK. Além disso, implementou os códigos vitais de verificação de integridade exigidos, programando o cálculo lógico da Paridade Par (para o Método 1) e o algoritmo de Checksum (para o Método 2).
+
+**Fase 3: Calibração da Física do Som, Vídeo e Documentação Científica**
+*   **Responsáveis:** Vinicius e [Nome do Colega]
+*   **Atribuições:** Vinicius assumiu a etapa final de polimento físico e entregas burocráticas. Foi o responsável por alinhar os protótipos de áudio com a física do mundo real, programando o filtro de ruído por percentil 95, o bloqueio de arranque (*grace period*) e o *debounce* acústico de 0.20s para ignorar eco. Sintetizou matematicamente o som do transmissor do Método 1 (onda de 1500Hz com decaimento exponencial) para garantir a interoperabilidade exigida pelo vídeo de referência do professor. Foi também o autor integral da elaboração deste Relatório Técnico/README (Tarefa B). Na etapa de audiovisual (Tarefa C), Vinicius foi o responsável por gravar todo o material do Vídeo de Demonstração, enquanto [Nome do Colega] assumiu a edição final do vídeo, garantindo que as simulações de sucesso e falha ficassem claras antes de o incorporar ao repositório.
+
+---
+
+## 4. Desafios, Problemas e Soluções
+
+A implementação da comunicação via som ambiente gerou desafios de instabilidade física e processamento de sinal:
+1.  **Falsos Positivos de Arranque:** O ruído físico do utilizador a clicar no rato para ativar o receptor causava um pico de amplitude lido erroneamente como um bit. *Solução:* Implementação de um bloqueio de arranque (grace period), configurando a máquina de estados para descartar todo e qualquer input de áudio no primeiro 1 segundo de ativação.
+2.  **Reverberação no Método 1:** O eco das batidas nas paredes do ambiente ultrapassava o limiar mínimo de amplitude, gerando bits duplicados. *Solução:* Aumento do *debounce* interno para 0.20s e alteração do filtro de volume para o percentil 95 (`np.percentile`), isolando transientes reais do ruído de fundo.
+3.  **Sincronização no Método 2 (Perda de Quadros):** A gravação do áudio FSK necessita de um momento exato de partida para a leitura da FFT. Inícios assíncronos corrompiam a decodificação dos bytes. *Solução:* Introdução de um tom de pré-sincronismo (Preâmbulo) de 4000 Hz. O receptor permanece pausado e só inicia os cronômetros de leitura fracionada após a detecção estrita desse tom específico.
+
+---
+
+## 5. Declaração do Uso de Inteligência Artificial
+
+A ferramenta de Inteligência Artificial Google Gemini foi utilizada ativamente ao longo de todo o ciclo de vida do software, atuando como parceira de depuração (*debugging*) e mentora em processamento de sinais. O uso ocorreu de forma linear e progressiva nas seguintes fases:
+
+*   **Fase 1: Prototipagem e Bibliotecas de Áudio:** No início do projeto, a IA foi utilizada para compreender o funcionamento assíncrono da biblioteca `sounddevice`. Como a leitura do microfone precisava ocorrer em tempo real sem congelar a interface gráfica, a IA auxiliou na estruturação correta das funções de *callback* e na leitura de blocos de áudio (`indata`) utilizando o `numpy`.
+*   **Fase 2: Refatoração e Implementação da FFT:** Quando os scripts iniciais de modulação foram finalizados pela equipe, utilizamos a IA para refatorar e unificar os códigos num padrão limpo. Neste ponto, a IA explicou a aplicação prática da Transformada Rápida de Fourier (`np.fft.rfft`), gerando os trechos matemáticos exatos para converter os blocos de áudio do domínio do tempo para o domínio da frequência, permitindo a identificação dos picos em Hz.
+*   **Fase 3: Arquitetura do Protocolo 16-FSK (Camada de Enlace):** Para o Método 2, a IA foi consultada para desenhar a lógica de fatiamento de dados. Ela auxiliou a programar as rotinas que quebram uma *string* ASCII em bits, agrupam esses bits de 4 em 4 (símbolos) e concatenam os bytes de cabeçalho (tamanho) e rodapé (checksum) no array de áudio final, formatando corretamente as transições de frequência.
+*   **Fase 4: Integração de UI e Exportação de Arquivos:** A IA gerou as lógicas matemáticas para o alinhamento visual dos elementos na interface Pygame (como o desenho das chaves de agrupamento de bits na tela). Adicionalmente, forneceu o *snippet* de integração entre `numpy`, `scipy.io.wavfile` e a janela nativa do `tkinter` para permitir a exportação dos arrays flutuantes de som para arquivos `.wav` de 16-bits.
+*   **Fase 5: Calibração da Física do Ambiente e Sintetização:** Na etapa final, a IA foi vital para adaptar o código à física do mundo real. Para o Método 1, a IA formulou a equação matemática que sintetiza um "estalo" perfeito (onda senoidal multiplicada por decaimento exponencial). Em seguida, auxiliou na criação do *Grace Period* (bloqueio de escuta de 1 segundo ao clicar no Play) e na substituição de limiares absolutos por limites baseados no percentil 95 (`np.percentile`), permitindo que o microfone ignorasse os ecos acústicos da sala e o som físico do clique do rato.
 
 ---
 
 ## 6. Conclusão
-O desenvolvimento deste projeto ilustra com precisão os desafios de engenharia ocultos sob as especificações teóricas de rede. A transição de uma comunicação reativa (baseada em amplitude e limites de silêncio) para uma transmissão 4-FSK síncrona exigiu a aplicação prática de conceitos como temporização de bloco, resolução espectral (FFT), e tolerância de guarda de frequências, provando que um sistema robusto depende de um casamento perfeito entre as regras da física no mundo real e a lógica matemática no software.
+
+O desenvolvimento prático da Camada Física acústica demonstrou os limites e a volatilidade de um meio de transmissão não guiado. Diferente da comunicação digital isolada em cabos, o canal sonoro sofre interferência constante, exigindo compensações críticas de software. A principal observação técnica é que aumentar a sensibilidade de escuta amplifica o ruído de fundo na mesma proporção que o sinal útil. O projeto validou a necessidade de mecanismos de controle (como margens de distanciamento de frequências no FSK e algoritmos de detecção de erros) para estabilizar a leitura de dados, comprovando empiricamente os desafios superados por protocolos industriais de comunicação em ambientes ruidosos.
+
+---
+## Licença
+Este software está licenciado sob a licença Open-Source **MIT License**. Detalhes podem ser encontrados nos cabeçalhos dos arquivos de código-fonte e no arquivo LICENSE do repositório.

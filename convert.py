@@ -1,5 +1,7 @@
 def converter(n):
     return (format(int(ord(n)),'08b'))
+
+
 #    try:
 #        return format(int(n), '08b')
 #    except:

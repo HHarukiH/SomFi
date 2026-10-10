@@ -2,98 +2,109 @@ import sounddevice as sd
 import numpy as np
 import time
 
-# --- PARÂMETROS DE CALIBRAÇÃO ---
-THRESHOLD_AMPLITUDE = 27.0 # Limiar de corte de ruído
-DEBOUNCE_TIME = 0.2        # Supressão de eco mecânico (segundos)
-BIT_1_MAX_GAP = 0.6        # Tempo máximo entre duas batidas para virar um Bit 1
-BIT_0_TIMEOUT = 0.8        # Tempo de silêncio para fechar um Bit 0
+TAXA_AMOSTRAGEM = 44100
+BLOCO_AUDIO = 1024
 
-# --- VARIÁVEIS GLOBAIS DE ESTADO (Motor) ---
-last_impact_time = 0.0
-state = "IDLE"
+# CALIBRAÇÃO FÍSICA DO AMBIENTE
+LIMIAR_VOLUME = 0.08       # Baixo o suficiente para ouvir; alto o suficiente para ignorar ruído branco
+DEBOUNCE_ECO = 0.20        # Tempo cego após um estalo para ignorar ecos da sala
+JANELA_BIT_1 = 0.55        # Tempo máximo permitido para a segunda batida (Bit 1)
+JANELA_SILENCIO = 0.80     # Tempo de silêncio necessário para fechar/confirmar o bit
+
+state = "WAITING_START"
 bit_buffer = []
-is_paused = False # Variável que controla se o motor deve ignorar os sons
-
-# --- VARIÁVEIS GLOBAIS DE ESTADO (Interface) ---
+historico_quadros = []
 resultado_validacao = ""
 ultima_mensagem_tempo = 0.0
-historico_quadros = []
 
-def validate_frame(frame_bits):
-    """
-    Recorta os 8 primeiros bits, calcula a paridade e compara com o 9º bit recebido.
-    """
+is_paused = True
+_foi_pausado_antes = True
+
+tempo_ultima_batida = 0.0
+contador_batidas_no_bit = 0
+estagio_bit = "AGUARDANDO_PRIMEIRA"
+tempo_inicio_escuta = 0.0  
+
+def validar_quadro_paridade(bits):
     global resultado_validacao, ultima_mensagem_tempo, historico_quadros
-    
-    dados = frame_bits[:8]
-    bit_paridade_recebido = frame_bits[8]
-    
-    qtd_uns = sum(dados)
-    paridade_esperada = 0 if qtd_uns % 2 == 0 else 1
-    
-    sucesso = (paridade_esperada == bit_paridade_recebido)
-    bits_str = "".join(str(b) for b in frame_bits)
-    
-    if sucesso:
-        resultado_validacao = f"[SUCESSO] Dados: {bits_str[:8]} | Par.: {bit_paridade_recebido}"
-        print(f"\n[SUCESSO] Quadro íntegro. Paridade confere.")
-    else:
-        resultado_validacao = f"[FALHA] Recebido: {bits_str} | Esp: {paridade_esperada}"
-        print(f"\n[FALHA] Corrupção. Esperado: {paridade_esperada}, Recebido: {bit_paridade_recebido}")
+    if len(bits) < 9:
+        return
         
+    dados = bits[:8]
+    bit_paridade_recebido = bits[8]
+    
+    uns = dados.count(1)
+    paridade_calculada = 0 if uns % 2 == 0 else 1
+    
+    sucesso = (paridade_calculada == bit_paridade_recebido)
+    
+    try:
+        bytes_dados = [dados[i:i+8] for i in range(0, len(dados), 8)]
+        texto_final = "".join([chr(int("".join(str(b) for b in byte), 2)) for byte in bytes_dados])
+    except:
+        texto_final = "???"
+
+    if sucesso:
+        resultado_validacao = f"[SUCESSO] Bits íntegros: '{texto_final}'"
+    else:
+        resultado_validacao = f"[FALHA] Erro de Paridade Par detectado!"
+        
+    print(f"\n{resultado_validacao}")
     ultima_mensagem_tempo = time.time()
     
-    # Grava uma cópia da lista na memória para a tabela do histórico
     historico_quadros.append({
-        "bits": list(frame_bits), 
+        "bits": list(bits),
         "sucesso": sucesso
     })
-    
-    if len(historico_quadros) > 4:
-        historico_quadros.pop(0)
+    if len(historico_quadros) > 5: historico_quadros.pop(0)
 
 def process_audio_stream(indata, frames, time_info, status):
-    """Callback assíncrono que extrai os bits através do volume e do tempo."""
-    global last_impact_time, state, bit_buffer, is_paused
+    global state, bit_buffer, tempo_ultima_batida, contador_batidas_no_bit
+    global estagio_bit, is_paused, tempo_inicio_escuta, _foi_pausado_antes
     
-    # PORTÃO LÓGICO: Se estiver em pausa, ignora este bloco de áudio e sai da função.
     if is_paused:
+        _foi_pausado_antes = True 
         return
-    
-    amplitude = np.linalg.norm(indata) * 10
-    current_time = time.time()
-    delta_time = current_time - last_impact_time
-    
-    # 1. DETECÇÃO DE IMPACTO
-    if amplitude > THRESHOLD_AMPLITUDE and delta_time > DEBOUNCE_TIME:
-        if state == "IDLE":
-            state = "WAITING_SECOND"
-            last_impact_time = current_time
-            print(f"[SINAL] Batida 1 (Amp: {amplitude:.2f})")
-            
-        elif state == "WAITING_SECOND":
-            if delta_time <= BIT_1_MAX_GAP:
-                bit_buffer.append(1)
-                print(">>> BIT 1 Registrado")
-                state = "IDLE"
-                last_impact_time = current_time
-                
-    # 2. DETECÇÃO DE SILÊNCIO
-    if state == "WAITING_SECOND" and (current_time - last_impact_time) > BIT_0_TIMEOUT:
-        bit_buffer.append(0)
-        print(">>> BIT 0 Registrado")
-        state = "IDLE"
         
-    # 3. VERIFICAÇÃO DO QUADRO
-    if len(bit_buffer) == 9:
-        validate_frame(bit_buffer)
-        bit_buffer.clear()
+    tempo_atual = time.time()
+    
+    if _foi_pausado_antes:
+        tempo_inicio_escuta = tempo_atual
+        _foi_pausado_antes = False
+        print("[SISTEMA] Escuta ativada. Calibrado para cadência humana.")
+        
+    # Bloqueio de clique do mouse inicial
+    if tempo_atual - tempo_inicio_escuta < 0.8:
+        return
 
-if __name__ == "__main__":
-    print("Motor Acústico Iniciado em Modo Texto. (Pressione Ctrl+C para encerrar)")
-    try:
-        with sd.InputStream(callback=process_audio_stream, channels=1, samplerate=44100):
-            while True:
-                sd.sleep(100)
-    except KeyboardInterrupt:
-        print("\nRecepção encerrada.")
+    # Usamos percentil 95 em vez do pico absoluto (np.max). 
+    # Isso evita que um único "estalo elétrico" na placa de som engane o microfone.
+    energia_impacto = np.percentile(np.abs(indata), 95)
+    
+    if energia_impacto > LIMIAR_VOLUME:
+        if tempo_atual - tempo_ultima_batida > DEBOUNCE_ECO: 
+            if estagio_bit == "AGUARDANDO_PRIMEIRA":
+                tempo_ultima_batida = tempo_atual
+                contador_batidas_no_bit = 1
+                estagio_bit = "COLETANDO_SEGUNDA"
+                print("\n[*] Impacto 1...")
+            elif estagio_bit == "COLETANDO_SEGUNDA":
+                if tempo_atual - tempo_ultima_batida <= JANELA_BIT_1: 
+                    contador_batidas_no_bit = 2
+                    tempo_ultima_batida = tempo_atual
+                    print("[*] Impacto 2...")
+                    
+    # Lógica de fechamento de Bit pelo Silêncio
+    if estagio_bit == "COLETANDO_SEGUNDA" and (tempo_atual - tempo_ultima_batida > JANELA_SILENCIO):
+        bit_lido = 0 if contador_batidas_no_bit == 1 else 1
+        bit_buffer.append(bit_lido)
+        
+        print(f"[RECEPTOR] => Bit {bit_lido}")
+        
+        contador_batidas_no_bit = 0
+        estagio_bit = "AGUARDANDO_PRIMEIRA"
+        
+        if len(bit_buffer) == 9:
+            validar_quadro_paridade(bit_buffer)
+            bit_buffer.clear()
+            is_paused = True
