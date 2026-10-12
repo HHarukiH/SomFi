@@ -350,14 +350,26 @@ def desenhar_m4():
     ecra.blit(fonte_pequena.render(f"Estado Relógio: {prog4.state}", False, BRANCO), (150, 70))
     
     if m4_historico_ativo is not None and m4_historico_ativo < len(prog4.historico_quadros):
+        # Modo Inspeção do Histórico
         bits_historico = prog4.historico_quadros[m4_historico_ativo]['bits']
         pygame.draw.rect(ecra, CINZENTO_ESCURO, (20, 100, 860, 420), 1)
         ecra.blit(fonte_pequena.render("INSPEÇÃO FORENSE DA MSG LIDA:", False, AZUL_SOMA), (30, 110))
         desenhar_grelha_agrupada(ecra, bits_historico, fonte_mini, fonte_pequena, start_x=45, start_y=160)
+        
     elif prog4.bit_buffer:
+        # Modo de Visualização Principal (A construir ou em Falha Congelada)
         pygame.draw.rect(ecra, CINZENTO_ESCURO, (20, 100, 860, 420), 1)
+        
+        if prog4.is_paused and len(prog4.historico_quadros) > 0 and not prog4.historico_quadros[-1]['sucesso']:
+            aviso = "ERRO: SINAL CORROMPIDO OU INTERROMPIDO. CLIQUE NO PLAY."
+            ecra.blit(fonte_pequena.render(aviso, False, VERMELHO_ALERTA), (30, 115))
+        else:
+            ecra.blit(fonte_pequena.render("RECEBENDO DADOS...", False, VERDE_RETRO), (30, 110))
+            
         desenhar_grelha_agrupada(ecra, prog4.bit_buffer, fonte_mini, fonte_pequena, start_x=45, start_y=160)
+        
     else:
+        # Modo Vazio (Aguardando ou Desligado Limpo)
         pygame.draw.rect(ecra, CINZENTO_ESCURO, (20, 100, 860, 420), 1)
         if prog4.is_paused:
             ecra.blit(fonte_pequena.render("SISTEMA DESLIGADO. CLIQUE NO PLAY PARA ESCUTAR.", False, CINZENTO_CLARO), (210, 290))
@@ -367,16 +379,25 @@ def desenhar_m4():
     ecra.blit(fonte_pequena.render("HISTÓRICO DE TRANSMISSÃO:", False, BRANCO), (20, 540))
     y_hist = 570
     
+    # LISTA CONTÍNUA DE MENSAGENS AJUSTADA PARA O CANTO DIREITO
     for idx, reg in enumerate(prog4.historico_quadros):
         cor_status = VERDE_RETRO if reg["sucesso"] else VERMELHO_ALERTA
         
-        texto_msg = f"MSG: '{reg['texto']}'"
-        ecra.blit(fonte_pequena.render(texto_msg, False, cor_status), (20, y_hist))
-        ecra.blit(fonte_pequena.render(f"({reg['tempo']:.2f}s)", False, CINZENTO_CLARO), (500, y_hist))
+        if reg["sucesso"]:
+            texto_msg = f"MSG: '{reg['texto']}'"
+            ecra.blit(fonte_pequena.render(texto_msg, False, cor_status), (20, y_hist))
+            ecra.blit(fonte_pequena.render(f"({reg['tempo']:.2f}s)", False, CINZENTO_CLARO), (720, y_hist))
+        else:
+            detalhe = reg.get('detalhe', 'Falha de Integridade')
+            texto_msg = f"ERRO: {detalhe}"
+            # Aumentamos o limite para 65 caracteres
+            ecra.blit(fonte_pequena.render(texto_msg[:65] + ("..." if len(texto_msg)>65 else ""), False, cor_status), (20, y_hist))
+            ecra.blit(fonte_pequena.render("(FALHA)", False, VERMELHO_ALERTA), (720, y_hist))
         
-        btn_dots = pygame.Rect(600, y_hist - 2, 40, 20)
+        # Botão empurrado para a coluna 820
+        btn_dots = pygame.Rect(820, y_hist - 2, 40, 20)
         pygame.draw.rect(ecra, CINZENTO_CLARO, btn_dots, 1)
-        ecra.blit(fonte_pequena.render("...", False, BRANCO), (608, y_hist))
+        ecra.blit(fonte_pequena.render("...", False, BRANCO), (828, y_hist))
         
         y_hist += 25
 
@@ -555,7 +576,8 @@ def iniciar_gui():
                     if tela_atual == "M4":
                         y_hist = 570
                         for idx, reg in enumerate(prog4.historico_quadros):
-                            btn_dots = pygame.Rect(600, y_hist - 2, 40, 20)
+                            # Colisão de clique empurrada para a coluna 820
+                            btn_dots = pygame.Rect(820, y_hist - 2, 40, 20)
                             if btn_dots.collidepoint(mx, my):
                                 m4_historico_ativo = idx if m4_historico_ativo != idx else None
                             y_hist += 25

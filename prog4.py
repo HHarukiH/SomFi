@@ -5,7 +5,7 @@ import time
 # --- CALIBRAÇÃO DO RELÓGIO E RADAR ---
 TAXA_AMOSTRAGEM = 44100
 BLOCO_AUDIO = 1024         
-LIMIAR_VOLUME = 5.0
+LIMIAR_VOLUME = 2.5
 MARGEM_HZ = 50             
 
 DURACAO_SOM = 0.20
@@ -14,12 +14,12 @@ MEIO_DO_SOM = 0.10
 # --- VARIÁVEIS DA MÁQUINA DE ESTADO TEMPORAL ---
 state = "WAITING_SYNC"     
 sync_time = 0.0            
-tempo_inicio_rx = 0.0      # NOVO: Regista o instante exato em que a receção começa
+tempo_inicio_rx = 0.0      
 simbolos_lidos = 0         
 bit_buffer = []
 total_simbolos_esperados = None 
 
-is_paused = True           # NOVO: Inicia sempre pausado por segurança
+is_paused = True           
 esperando_silencio = False 
 
 resultado_validacao = ""
@@ -45,10 +45,40 @@ def mapear_frequencia(freq):
     if abs(freq - 3800) <= MARGEM_HZ: return [1, 1, 1, 1]
     return None
 
+def abortar_recepcao(motivo):
+    """Função que gerencia interrupções de áudio congelando a interface"""
+    global state, esperando_silencio, is_paused, resultado_validacao, ultima_mensagem_tempo
+    
+    bits_lidos = len(bit_buffer)
+    if total_simbolos_esperados:
+        esperados = total_simbolos_esperados * 4
+        detalhe = f"{motivo} ({bits_lidos}/{esperados} bits)"
+    else:
+        detalhe = f"{motivo} ({bits_lidos} bits)"
+        
+    resultado_validacao = f"[ERRO] {detalhe}"
+    print(f"\n{resultado_validacao}")
+    ultima_mensagem_tempo = time.time()
+    
+    historico_quadros.append({
+        "texto": "SINAL INTERROMPIDO", 
+        "sucesso": False,
+        "bits": list(bit_buffer),
+        "tempo": 0.0,
+        "detalhe": detalhe
+    })
+    if len(historico_quadros) > 5: historico_quadros.pop(0)
+    
+    # ATENÇÃO: bit_buffer NÃO é limpo aqui. Isso mantém a grelha quebrada visível na tela.
+    state = "WAITING_SYNC"
+    esperando_silencio = False
+    is_paused = True # Força a pausa da interface. Só destrava clicando no Play de novo.
+
 def validar_quadro_dinamico(frame_bits, tempo_transmissao):
-    global resultado_validacao, ultima_mensagem_tempo, historico_quadros
+    global resultado_validacao, ultima_mensagem_tempo, historico_quadros, state, esperando_silencio, is_paused
     
     if len(frame_bits) < 16:
+        abortar_recepcao("Pacote mutilado (Sem tamanho minimo)")
         return
     
     bits_tamanho = frame_bits[:8]
@@ -59,7 +89,15 @@ def validar_quadro_dinamico(frame_bits, tempo_transmissao):
     soma_recebida = int("".join(str(b) for b in bits_soma), 2)
     soma_real_dados = sum(dados)
     
-    sucesso = (soma_real_dados == soma_recebida and len(dados) == tamanho_recebido)
+    sucesso = True
+    detalhe_erro = "OK"
+    
+    if len(dados) != tamanho_recebido:
+        sucesso = False
+        detalhe_erro = f"Tamanho Incoerente (Esp: {tamanho_recebido}b, Rec: {len(dados)}b)"
+    elif soma_real_dados != soma_recebida:
+        sucesso = False
+        detalhe_erro = f"Checksum Invalido (Soma esp: {soma_real_dados}, Rec: {soma_recebida})"
     
     try:
         bytes_dados = [dados[i:i+8] for i in range(0, len(dados), 8)]
@@ -67,27 +105,36 @@ def validar_quadro_dinamico(frame_bits, tempo_transmissao):
     except:
         texto_final = "???"
 
-    # Se falhar, sobrepõe a mensagem com ERRO para a interface
-    texto_historico = texto_final if sucesso else "ERRO"
+    texto_historico = texto_final if sucesso else "FALHA DE INTEGRIDADE"
 
     if sucesso:
         resultado_validacao = f"[SUCESSO] Tempo: {tempo_transmissao:.2f}s"
-        print(f"\n{resultado_validacao}")
     else:
-        resultado_validacao = f"[FALHA] Falha na integridade dos dados."
-        print(f"\n{resultado_validacao}")
+        resultado_validacao = f"[FALHA] {detalhe_erro}"
         
+    print(f"\n{resultado_validacao}")
     ultima_mensagem_tempo = time.time()
     
-    # Guarda todos os metadados necessários para a inspeção forense na interface
     historico_quadros.append({
         "texto": texto_historico, 
         "sucesso": sucesso,
         "bits": list(frame_bits),
-        "tempo": tempo_transmissao
+        "tempo": tempo_transmissao,
+        "detalhe": detalhe_erro
     })
     
     if len(historico_quadros) > 5: historico_quadros.pop(0)
+    
+    if sucesso:
+        # Se for sucesso, o sistema apaga a grelha e continua pronto para ouvir a próxima palavra automaticamente
+        bit_buffer.clear()
+        state = "WAITING_SYNC"
+        esperando_silencio = False
+    else:
+        # Se falhou por corrupção, NÃO limpa o buffer e FORÇA A PAUSA.
+        state = "WAITING_SYNC"
+        esperando_silencio = False
+        is_paused = True 
 
 def processar_audio_fsk(indata, frames, time_info, status):
     global state, sync_time, tempo_inicio_rx, simbolos_lidos, bit_buffer, esperando_silencio, is_paused, total_simbolos_esperados
@@ -96,8 +143,14 @@ def processar_audio_fsk(indata, frames, time_info, status):
         return
         
     volume = np.linalg.norm(indata) * 10
+    
+    # Tratamento contra o apagão silencioso
     if volume < LIMIAR_VOLUME:
-        if state == "WAITING_DATA_START" or state == "RECEIVING_DATA":
+        if state == "RECEIVING_DATA":
+            # O tablet parou de tocar no meio da mensagem
+            abortar_recepcao("Sinal cortado fisicamente (Silencio)")
+            return
+        elif state == "WAITING_DATA_START":
             state = "WAITING_SYNC"
             esperando_silencio = False
             bit_buffer.clear()
@@ -118,7 +171,7 @@ def processar_audio_fsk(indata, frames, time_info, status):
             par_bits = mapear_frequencia(frequencia_pico)
             if par_bits is not None:
                 sync_time = tempo_atual
-                tempo_inicio_rx = tempo_atual # Dispara o relógio de transmissão total
+                tempo_inicio_rx = tempo_atual 
                 bit_buffer.clear()
                 bit_buffer.extend(par_bits)
                 simbolos_lidos = 1
@@ -130,12 +183,10 @@ def processar_audio_fsk(indata, frames, time_info, status):
         tempo_decorrido = tempo_atual - sync_time
         alvo_temporal = (simbolos_lidos * DURACAO_SOM) + MEIO_DO_SOM
         
-        timeout = (total_simbolos_esperados * DURACAO_SOM) + 1.0 if total_simbolos_esperados else 30
+        timeout = (total_simbolos_esperados * DURACAO_SOM) + 1.0 if total_simbolos_esperados else 5.0
+        
         if tempo_decorrido > timeout:
-            print("[ALERTA] Timeout! Áudio incompleto.")
-            state = "WAITING_SYNC"
-            esperando_silencio = False
-            is_paused = True # Auto-pause por falha
+            abortar_recepcao("Timeout de Recepcao (Ruido)")
             return
         
         if tempo_decorrido >= alvo_temporal:
@@ -155,10 +206,6 @@ def processar_audio_fsk(indata, frames, time_info, status):
             if total_simbolos_esperados is not None and simbolos_lidos == total_simbolos_esperados:
                 tempo_total_tx = (time.time() - tempo_inicio_rx) + DURACAO_SOM
                 validar_quadro_dinamico(bit_buffer, tempo_total_tx)
-                bit_buffer.clear()
-                state = "WAITING_SYNC"
-                esperando_silencio = False
-                is_paused = True # AUTO-PAUSE SUCESSO: Desliga a escuta automaticamente
 
 if __name__ == "__main__":
     print("Motor Síncrono 16-FSK (Dinâmico) Iniciado.")
