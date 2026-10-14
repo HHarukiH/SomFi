@@ -1,8 +1,8 @@
-# 📡 Sistema de Comunicação Acústica
+# Sistema de Comunicação Acústica
 
 **Disciplina:** Redes de Computadores  
 **Instituição:** Universidade Tecnológica Federal do Paraná (UTFPR) - Campo Mourão  
-**Equipe:** Vinicius, [Nome do Colega]
+**Equipe:** Vinicius Galinski, Heitor Haruki.
 
 Este projeto implementa um software capaz de atuar como Emissor e Receptor de dados digitais utilizando o meio acústico (ondas sonoras). O sistema foi desenvolvido em Python e opera a transmissão e a recepção de quadros de bits em tempo real.
 
@@ -18,8 +18,13 @@ A nossa implementação atua primordialmente na **Camada Física**, responsável
 *   **Largura de Banda e Modulação:** A capacidade do canal acústico é gerida alterando as propriedades do som. No Método 1, a modulação baseia-se na variação de tempo (cadência). No Método 2, utilizamos a Modulação por Deslocamento de Frequência (FSK), alocando diferentes frequências para representar agrupamentos de bits.
 *   **Ruído:** O tratamento da interferência física do ambiente, como reverberação e sons de fundo, que causam distorção na leitura da amplitude ou da frequência.
 
-### Transição para a Camada de Enlace e Detecção de Erros
-Para poder estruturar melhor o projeto, tivemos que implementar características que já pertencem à **Camada de Enlace**. Apenas transmitir sinais no ar não é suficiente; o sistema precisa agrupar os bits em quadros organizados para delimitar início e fim, e garantir a integridade da mensagem contra ruídos.
+**Transição para a Camada de Enlace e Detecção de Erros**
+Para estruturar e proteger a comunicação, implementamos características estritas da **Camada de Enlace**. O sistema agrupa os bits em quadros organizados para delimitar início e fim, garantindo a integridade da mensagem contra ruídos e quedas de sinal. O software mapeia e trata ativamente quatro cenários de falha na recepção:
+
+1.  **Paridade Par (Método 1):** Utiliza um quadro de 9 bits. O transmissor conta os bits `1` presentes nos 8 bits de dados e adiciona um 9º bit para garantir que a soma total seja par. 
+2.  **Validação de Tamanho Dinâmico (Length Header):** No Método 16-FSK, o receptor lê os primeiros 8 bits para determinar o tamanho matemático exato da carga útil. Se o áudio for interrompido precocemente (Timeout) ou o ruído injetar bits extras, o sistema acusa *Tamanho Incoerente* ou *Sinal Perdido*.
+3.  **Soma Simples / Checksum:** Os bits da carga de dados são somados, e o valor numérico é convertido num byte final (8 bits). Se a leitura da carga sofrer mutação por ruído branco no ar, o cálculo não baterá com o Checksum, gerando um erro de *Falha de Integridade*.
+4.  **Bloqueio de Estado (Auto-Pause):** Em qualquer detecção de corrupção ou interrupção, o sistema descarta a transformação dos bits em caracteres e congela o motor de escuta, exigindo rearme manual do utilizador para evitar o encadeamento de leituras falsas.
 
 Implementamos duas técnicas de detecção de erros:
 1.  **Paridade Par (Método 1):** Utiliza um quadro de 9 bits. O transmissor conta os bits `1` presentes nos 8 bits de dados e adiciona um 9º bit (0 ou 1) para garantir que a soma total de bits `1` no quadro seja um número par. O receptor realiza a mesma contagem para validar a integridade.
@@ -47,6 +52,8 @@ Para alcançar uma maior taxa de transmissão, projetamos um motor síncrono uti
     
     A capacidade total máxima por envio é de 264 bits (8 de tamanho + 248 de dados + 8 de soma).
 *   **Taxa de Transmissão Prática:** O transmissor emite 1 símbolo (4 bits) a cada 0.20 segundos. A taxa de transmissão atinge a marca teórica e prática de **20 bps (bits por segundo)**.
+*   **Inspeção Forense e Interface Gráfica:**
+Todo o tráfego acústico é renderizado numa interface gráfica de monitoramento em tempo real (GUI desenvolvida em Pygame). O sistema possui um painel de histórico contínuo que cataloga cada transmissão, permitindo a expansão de um quadro para inspeção visual dos bits agrupados por cor (Azul para Cabeçalho, Verde para Dados, Vermelho para Checksum). Quando ocorre perda de pacotes por distorção física do som, a GUI paralisa a escuta preventivamente e estampa o diagnóstico exato do erro na tela (ex: Checksum Inválido, Sinal Interrompido, Pacote Mutilado), provando a filtragem da Camada de Enlace.
 
 ---
 
@@ -59,12 +66,12 @@ O desenvolvimento do software, bem como a produção dos materiais exigidos para
 *   **Atribuições:** Iniciou a estruturação do projeto criando a espinha dorsal da arquitetura do software. Foi o responsável por idealizar e desenvolver a interface gráfica central (GUI) utilizando a biblioteca `pygame`, projetando o painel de inspeção forense de bits e a renderização em tempo real das grelhas de dados. Concebeu a arquitetura do "Método 2" (16-FSK Dinâmico), definindo a estrutura do protocolo da Camada de Enlace que fatiaria a mensagem em Cabeçalho (Tamanho), Carga Útil (Dados ASCII) e Rodapé (Checksum). Criou também o mapeamento do menu e a lógica de transição fluida entre os módulos de Transmissão e Recepção.
 
 **Fase 2: Desenvolvimento dos Motores de Áudio e Algoritmos de Erro**
-*   **Responsável:** [Nome do Colega]
+*   **Responsável:** Heitor
 *   **Atribuições:** Assumiu o desenvolvimento braçal e a pesquisa matemática para os primeiros protótipos dos motores acústicos (`prog` a `prog5`). Realizou a implementação base das bibliotecas `sounddevice` e `numpy` para leitura e geração de áudio. Escreveu os algoritmos primários para a extração de espectros de frequência utilizando a Transformada Rápida de Fourier (FFT), definindo o mapeamento dos 16 símbolos do FSK. Além disso, implementou os códigos vitais de verificação de integridade exigidos, programando o cálculo lógico da Paridade Par (para o Método 1) e o algoritmo de Checksum (para o Método 2).
 
 **Fase 3: Calibração da Física do Som, Vídeo e Documentação Científica**
-*   **Responsáveis:** Vinicius e [Nome do Colega]
-*   **Atribuições:** Vinicius assumiu a etapa final de polimento físico e entregas burocráticas. Foi o responsável por alinhar os protótipos de áudio com a física do mundo real, programando o filtro de ruído por percentil 95, o bloqueio de arranque (*grace period*) e o *debounce* acústico de 0.20s para ignorar eco. Sintetizou matematicamente o som do transmissor do Método 1 (onda de 1500Hz com decaimento exponencial) para garantir a interoperabilidade exigida pelo vídeo de referência do professor. Foi também o autor integral da elaboração deste Relatório Técnico/README (Tarefa B). Na etapa de audiovisual (Tarefa C), Vinicius foi o responsável por gravar todo o material do Vídeo de Demonstração, enquanto [Nome do Colega] assumiu a edição final do vídeo, garantindo que as simulações de sucesso e falha ficassem claras antes de o incorporar ao repositório.
+*   **Responsáveis:** Vinicius e Heitor
+*   **Atribuições:** Vinicius assumiu a etapa final de polimento físico e entregas burocráticas. Foi o responsável por alinhar os protótipos de áudio com a física do mundo real, programando o filtro de ruído por percentil 95, o bloqueio de arranque (*grace period*) e o *debounce* acústico de 0.20s para ignorar eco. Sintetizou matematicamente o som do transmissor do Método 1 (onda de 1500Hz com decaimento exponencial) para garantir a interoperabilidade exigida pelo vídeo de referência do professor. Foi também o autor integral da elaboração deste Relatório Técnico/README (Tarefa B). Na etapa de audiovisual (Tarefa C), Vinicius foi o responsável por gravar todo o material do Vídeo de Demonstração, enquanto Heitor assumiu a edição final do vídeo, garantindo que as simulações de sucesso e falha ficassem claras antes de o incorporar ao repositório.
 
 ---
 
@@ -74,6 +81,7 @@ A implementação da comunicação via som ambiente gerou desafios de instabilid
 1.  **Falsos Positivos de Arranque:** O ruído físico do utilizador a clicar no rato para ativar o receptor causava um pico de amplitude lido erroneamente como um bit. *Solução:* Implementação de um bloqueio de arranque (grace period), configurando a máquina de estados para descartar todo e qualquer input de áudio no primeiro 1 segundo de ativação.
 2.  **Reverberação no Método 1:** O eco das batidas nas paredes do ambiente ultrapassava o limiar mínimo de amplitude, gerando bits duplicados. *Solução:* Aumento do *debounce* interno para 0.20s e alteração do filtro de volume para o percentil 95 (`np.percentile`), isolando transientes reais do ruído de fundo.
 3.  **Sincronização no Método 2 (Perda de Quadros):** A gravação do áudio FSK necessita de um momento exato de partida para a leitura da FFT. Inícios assíncronos corrompiam a decodificação dos bytes. *Solução:* Introdução de um tom de pré-sincronismo (Preâmbulo) de 4000 Hz. O receptor permanece pausado e só inicia os cronômetros de leitura fracionada após a detecção estrita desse tom específico.
+4.  **O "Apagão Silencioso" (Timeouts e Perda de Pacotes):** Durante os testes de distância física, reduções bruscas na amplitude do som faziam o receptor de 16 frequências (FSK) perder a captação no meio do pacote. Inicialmente, o sistema limpava o buffer de memória e retornava ao estado de dormência sem acusar o erro visualmente. Solução: Reformulação da máquina de estados para mapear interrupções físicas de amplitude. O software passou a registrar logs de "Sinal Perdido", congelando a tela com os fragmentos dos bits corrompidos e travando a interface de escuta para evitar que o ruído subsequente fosse lido como um novo preâmbulo falso.
 
 ---
 
