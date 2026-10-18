@@ -18,8 +18,6 @@ Clique na imagem abaixo para assistir à demonstração:
 
 ## 1. Fundamentação Teórica
 
-## 1. Fundamentação Teórica
-
 ### O Modelo ISO/OSI e a Camada Física
 O Modelo OSI é uma arquitetura dividida em 7 camadas (Física, Enlace, Rede, Transporte, Sessão, Apresentação e Aplicação) que padroniza a comunicação entre sistemas. 
 
