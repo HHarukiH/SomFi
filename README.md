@@ -1,12 +1,22 @@
 # Sistema de Comunicação Acústica
 
 **Disciplina:** Redes de Computadores  
-**Instituição:** Universidade Tecnológica Federal do Paraná (UTFPR) - Campo Mourão  
+**Instituição:** UTFPR - Campo Mourão  
 **Equipe:** Vinicius Galinski, Heitor Haruki.
 
-Este projeto implementa um software capaz de atuar como Emissor e Receptor de dados digitais utilizando o meio acústico (ondas sonoras). O sistema foi desenvolvido em Python e opera a transmissão e a recepção de quadros de bits em tempo real.
+Este projeto implementa um software capaz de atuar como
+Emissor e Receptor de dados digitais utilizando o meio
+acústico (ondas sonoras).
+
+## Demonstração do Projeto
+
+Clique na imagem abaixo para assistir à demonstração:
+
+[![Demonstração do Sistema de Comunicação Acústica](https://img.youtube.com/vi/6_w5CIrHo4Q/maxresdefault.jpg)](https://youtu.be/6_w5CIrHo4Q)
 
 ---
+
+## 1. Fundamentação Teórica
 
 ## 1. Fundamentação Teórica
 
